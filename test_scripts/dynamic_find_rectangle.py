@@ -7,16 +7,21 @@ def empty(x):
     pass
 
 def get_countours(image,image_contour):
-    contours, hierarchy = cv2.findContours(image, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-    for cnt in contours:
-        area = cv2.contourArea(cnt) 
-        area_min = cv2.getTrackbarPos("area_min","parameters")
-        if area > area_min:
-            cv2.drawContours(image_contour,cnt,-1,(255,0,255),7)
-            perimeter = cv2.arcLength(cnt,True)
-            approx_geometry = cv2.approxPolyDP(cnt,0.02* perimeter,True)
-            x_,y_,w,h = cv2.boundingRect(approx_geometry)
-            cv2.rectangle(image_contour,(x_,y_),(x_+w,y_+h),(0,255,0),5)
+    contours,_ = cv2.findContours(image, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+    areas = [cv2.contourArea(cnt) for cnt in contours]
+
+    index_maximum_area = np.argmax(areas)
+
+    larger_contour = contours[index_maximum_area]
+
+    area = cv2.contourArea(larger_contour) 
+    area_min = cv2.getTrackbarPos("area_min","parameters")
+    if area > area_min:
+        cv2.drawContours(image_contour,larger_contour,-1,(255,0,255),7)
+        perimeter = cv2.arcLength(larger_contour,True)
+        approx_geometry = cv2.approxPolyDP(larger_contour,0.02* perimeter,True)
+        x_,y_,w,h = cv2.boundingRect(approx_geometry)
+        cv2.rectangle(image_contour,(x_,y_),(x_+w,y_+h),(0,255,0),5)
 
     
 

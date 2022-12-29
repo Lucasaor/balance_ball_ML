@@ -1,30 +1,47 @@
 from servo import Servo
+from camera import Camera
 import time
 import numpy as np
+import cv2
 
-#define output pins
-GPIO_SERVO_0_PIN = 11
-GPIO_SERVO_1_PIN = 12
 
-#initialize servos
-servo_0 = Servo()
-servo_1 = Servo()
+def main():
+    #define output pins
+    GPIO_SERVO_0_PIN = 11
+    GPIO_SERVO_1_PIN = 12
 
-#attach servos to selected pins
-servo_0.attach_pin(GPIO_SERVO_0_PIN)
-servo_1.attach_pin(GPIO_SERVO_1_PIN)
+    #define track range file path:
+    TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
 
-#running the motors
-input_generator = 0
+    try:
+        #initialize servos
+        servo_0 = Servo()
+        servo_1 = Servo()
 
-try:
-    while input_generator < 50:
-        servo_0.set_angle(np.sin(input_generator)*100)
-        servo_1.set_angle(np.cos(input_generator)*100)
+        #attach servos to selected pins
+        servo_0.attach_pin(GPIO_SERVO_0_PIN)
+        servo_1.attach_pin(GPIO_SERVO_1_PIN)
 
-        input_generator += 0.2
-        time.sleep(0.5)
-finally:
-    #disconnect the motors
-    servo_0.disconnect()
-    servo_1.disconnect()
+        #starting camera
+        cam = Camera()
+        cam.set_track_ranges(TRACK_RANGES_FILE_PATH)
+
+        #cropping the work area
+        cam.find_platform()
+
+    # running the process
+        while True:
+            cam.get_ball_position()
+            cam.show_camera_output()
+            if cv2.waitKey(1) & 0xFF is ord('q'):
+                break
+                
+    finally:
+        #disconnect the motors
+        cv2.destroyAllWindows()
+        servo_0.disconnect()
+        servo_1.disconnect()
+
+ 
+if __name__ == '__main__':
+    main()
