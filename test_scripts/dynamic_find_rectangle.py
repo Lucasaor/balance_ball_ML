@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+import json
 
 def empty(x):
     pass
@@ -63,6 +64,10 @@ def main():
         cv2.imshow("result",image_contour)
         if cv2.waitKey(1) & 0xFF is ord('q'):
             break
+
+        # if cv2.waitKey(1) & 0xFF is ord('s'):
+        #     area_min = cv2.getTrackbarPos("area_min","parameters")
+
             
     cv2.destroyAllWindows()
 

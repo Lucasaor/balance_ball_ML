@@ -1,16 +1,16 @@
 {
     "ball": {
         "H_min": 58,
-        "S_min": 55,
-        "V_min": 54,
-        "H_max": 87,
-        "S_max": 255,
+        "S_min": 0,
+        "V_min": 105,
+        "H_max": 97,
+        "S_max": 142,
         "V_max": 255
     },
     "platform":{
         "blur": 3,
-        "area_min": 1500,
-        "threshold1": 120,
-        "threshold2": 244
+        "area_min": 3500,
+        "threshold1": 80,
+        "threshold2": 88
     }
 }

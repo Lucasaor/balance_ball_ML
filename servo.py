@@ -15,7 +15,7 @@ class Servo():
         self.servo.start(0)
 
     def set_angle(self,input,timeout_seconds = None) -> None:
-        angle = self.__angle_to_pid_input(input)
+        angle = self.__PID_input_to_angle(input)
         if type(timeout_seconds)!=float or type(timeout_seconds)!=int:
             timeout_seconds = None
         if timeout_seconds is None:
@@ -30,12 +30,14 @@ class Servo():
         self.servo.stop()
         GPIO.cleanup()
 
-    def __angle_to_pid_input(self,input:int) -> int:
+    def __PID_input_to_angle(self,input:int) -> int:
+        """Converts PID input range (-100 to 100) to angular position of servos between 0 and 90 degrees. 
+        Saturates if input is out of bounds."""
         if input <-100:
             input = -100
         elif input > 100:
             input >100
-        angle = 0.9*(input+100)
+        angle = 0.45*(input+100) # expression to linear map the range
         
         return angle
         

@@ -8,8 +8,8 @@ import cv2
 
 def main():
     #define output pins
-    GPIO_SERVO_0_PIN = 11
-    GPIO_SERVO_1_PIN = 12
+    GPIO_SERVO_0_PIN = 11 #  bottom motor, green jumper
+    GPIO_SERVO_1_PIN = 12 #  right motor, red jumper
 
     #define track range file path:
     TRACK_RANGES_FILE_PATH = "trackbar_settings.json"

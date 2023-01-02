@@ -1,4 +1,4 @@
-# python dynamic_color_tracking.py --filter HSV --webcam
+# python3 dynamic_color_tracking.py --filter HSV --webcam
  
 import cv2
 import argparse
