@@ -1,6 +1,9 @@
+
+import asyncio
 from servo import Servo
 from camera import Camera
 from pid import PID
+from event_hub import publish_event
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -9,7 +12,7 @@ import json
 import cv2
 
 
-def main():
+async def main():
     #define output pins
     GPIO_SERVO_0_PIN = 32 #  bottom motor, green jumper
     GPIO_SERVO_1_PIN = 33 #  right motor, red jumper
@@ -17,7 +20,7 @@ def main():
     #define file paths:
     TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
     PID_PARAMETERS_FILE_PATH  = "PID_parameters.json"
-    HISTORICAL_DATA_FILE_PATH = "historical_data.csv"
+    #HISTORICAL_DATA_FILE_PATH = "historical_data.csv"
 
     NAME = "Lucas A. Rodrigues"
 
@@ -36,7 +39,7 @@ def main():
         #Creating the PID controllers (dynamically):
 
         #open local historical database:
-        history_df = pd.read_csv(HISTORICAL_DATA_FILE_PATH)
+        #history_df = pd.read_csv(HISTORICAL_DATA_FILE_PATH)
         
         PID_dict = {}
 
@@ -117,7 +120,18 @@ def main():
                 if not cam.ball_in_area:
                     balance_ready = start_balance = False
                     print(f"Trial #{trial_number} failed. Settling time: {max_settling_time_seconds*10}")
-                    history_df = append_historical_data(history_df,NAME,False,k_values,max_settling_time_seconds*10)
+                    check_save = input("save result to cloud (y/n)? ")
+                    if check_save.lower()=='y':
+                        event_hub_status = await push_data_to_event_hub(NAME,False,k_values,max_settling_time_seconds*10) 
+                        if event_hub_status:
+                            print("data sucessfully published to the cloud.")
+                        else:
+                            print('error writing data to the cloud.')
+                            print(event_hub_status)
+                        check_save ='n'
+                    else:
+                        print('event ignored.')
+                        
                     
 
                 t = time.perf_counter_ns()/1e9 - start_time
@@ -129,16 +143,36 @@ def main():
                 if t > max_settling_time_seconds:
                     balance_ready = start_balance = False
                     print(f"Trial #{trial_number} finished. Settling time: {max_settling_time_seconds}")
-                    history_df = append_historical_data(history_df,NAME,False,k_values,max_settling_time_seconds)
+                    check_save = input("save result to cloud (y/n)? ")
+                    if check_save.lower()=='y':
+                        event_hub_status = await push_data_to_event_hub(NAME,False,k_values,max_settling_time_seconds) 
+                        if event_hub_status:
+                            print("data sucessfully published to the cloud.")
+                        else:
+                            print('error writing data to the cloud.')
+                            print(event_hub_status)
+                        check_save ='n'
+                    else:
+                        print('event ignored.')
+                    
 
                 absolute_error = np.sqrt((cam.error_x-prev_error_x)**2 + (cam.error_y-prev_error_y)**2)
-                #print(f"absolute_error: {absolute_error}")
                 if absolute_error < error_thresh:
-                    #print(f"t={t},error_thresh_timer={error_thresh_timer},")
                     if (t -error_thresh_timer) > min_stop_time_seconds:
                         balance_ready = start_balance = False
                         print(f"Trial #{trial_number} finished. Settling time: {t}")
-                        history_df = append_historical_data(history_df,NAME,True,k_values,t)
+                        check_save = input("save result to cloud (y/n)? ")
+                        if check_save.lower()=='y':
+                            event_hub_status = await push_data_to_event_hub(NAME,False,k_values,t) 
+                            if event_hub_status:
+                                print("data sucessfully published to the cloud.")
+                            else:
+                                print('error writing data to the cloud.')
+                                print(event_hub_status)
+                            check_save ='n'
+                        else:
+                            print('event ignored.')
+                    
                         
                 else:
                     error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
@@ -152,8 +186,9 @@ def main():
                 start_time = time.perf_counter_ns()/1e9
                 error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
                 if not balance_ready:
-                    servo_0.set_angle(0,timeout_seconds=0.2)
-                    servo_1.set_angle(0,timeout_seconds=0.2)
+                    servo_0.set_angle(0,timeout_seconds=0.25)
+                    servo_1.set_angle(0,timeout_seconds=0.25)
+                    print("table ready.")
                 balance_ready = True
 
             cam.show_camera_output()
@@ -167,12 +202,10 @@ def main():
         servo_1.disconnect()
 
         #save historical_data:
-        history_df.to_csv(HISTORICAL_DATA_FILE_PATH,index=False)
+        #history_df.to_csv(HISTORICAL_DATA_FILE_PATH,index=False)
 
 def append_historical_data(history_df,NAME,success,k_values,settling_time)->pd.DataFrame:
-    return pd.concat([
-                        history_df,
-                        pd.DataFrame({
+    result_json = {
                             "TS":[datetime.utcnow()],
                             "name":[NAME],
                             "sucess":[success],
@@ -183,8 +216,34 @@ def append_historical_data(history_df,NAME,success,k_values,settling_time)->pd.D
                             "ki_y":[k_values['Y']['Ki']],
                             "kd_y":[k_values['Y']['Kd']],
                             "settling_time":[settling_time]
-                        })
-                    ], ignore_index=True)
+                        }
+    return pd.concat([
 
-if __name__ == '__main__':
-    main()
+                        history_df,
+                        pd.DataFrame(result_json)
+                    ], ignore_index=True)
+async def push_data_to_event_hub(NAME,success,k_values,settling_time)->bool:
+    try:
+        result_json = {
+                                "TS":str(datetime.utcnow()),
+                                "name":NAME,
+                                "sucess":success,
+                                "kp_x":k_values['X']['Kp'],
+                                "ki_x":k_values['X']['Ki'],
+                                "kd_x":k_values['X']['Kd'],
+                                "kp_y":k_values['Y']['Kp'],
+                                "ki_y":k_values['Y']['Ki'],
+                                "kd_y":k_values['Y']['Kd'],
+                                "settling_time":settling_time
+                            }
+        await publish_event(result_json)
+        return True
+    except Exception as e:
+        print(f"error found. Description: {str(e)}")
+        return False
+    
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
+
+# if __name__ == '__main__':
+#     main()

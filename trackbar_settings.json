@@ -2,7 +2,7 @@
     "ball": {
         "H_min": 60,
         "S_min": 0,
-        "V_min": 100,
+        "V_min": 120,
         "H_max": 108,
         "S_max": 142,
         "V_max": 255
