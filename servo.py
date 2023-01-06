@@ -16,13 +16,11 @@ class Servo():
 
     def set_angle(self,input,timeout_seconds = None) -> None:
         angle = self.__PID_input_to_angle(input)
-        if type(timeout_seconds)!=float or type(timeout_seconds)!=int:
-            timeout_seconds = None
         if timeout_seconds is None:
             self.servo.ChangeDutyCycle(2+(angle/18))
         else:
-            timer0 = time.perf_counter()
-            while (time.perf_counter()-timer0)<timeout_seconds:
+            timer0 = time.perf_counter_ns()/1e9
+            while (time.perf_counter_ns()/1e9-timer0)<timeout_seconds:
                 self.servo.ChangeDutyCycle(2+(angle/18))
             self.servo.ChangeDutyCycle(0)
     

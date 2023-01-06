@@ -1,8 +1,5 @@
 from servo import Servo
 from camera import Camera
-from pid import PID
-import time
-import numpy as np
 import cv2
 
 
@@ -13,6 +10,7 @@ def main():
 
     #define track range file path:
     TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
+
 
     try:
         #initialize servos
@@ -27,6 +25,19 @@ def main():
         cam = Camera()
         cam.set_track_ranges(TRACK_RANGES_FILE_PATH)
 
+        #create position control window
+        cv2.namedWindow("orientation")
+        cv2.resizeWindow("orientation",640,240)
+        
+        def set_servo_0(val):
+            # x orientation needs to be flipped before sending to check
+            servo_0.set_angle(-2*val+100)
+        def set_servo_1(val):
+            servo_1.set_angle(2*val-100)
+        
+        cv2.createTrackbar("X","orientation",54,100,set_servo_0)
+        cv2.createTrackbar("Y","orientation",30,100,set_servo_1)
+
         #cropping the work area
         cam.find_platform()
 
@@ -36,6 +47,9 @@ def main():
             cam.show_camera_output()
             if cv2.waitKey(1) & 0xFF is ord('q'):
                 break
+
+            
+            
                 
     finally:
         #disconnect the motors
@@ -43,6 +57,7 @@ def main():
         servo_0.disconnect()
         servo_1.disconnect()
 
- 
+
+
 if __name__ == '__main__':
     main()

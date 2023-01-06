@@ -35,9 +35,9 @@ def main():
     cv2.resizeWindow("parameters",640,240)
     
     cv2.createTrackbar("blur","parameters",3,12,empty)
-    cv2.createTrackbar("area_min","parameters",1500,5000,empty)
-    cv2.createTrackbar("threshold1","parameters",120,255,empty)
-    cv2.createTrackbar("threshold2","parameters",244,255,empty)
+    cv2.createTrackbar("area_min","parameters",3500,5000,empty)
+    cv2.createTrackbar("threshold1","parameters",80,255,empty)
+    cv2.createTrackbar("threshold2","parameters",88,255,empty)
 
     # best features in test: (3,1500,120,244)
 

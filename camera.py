@@ -9,6 +9,7 @@ class Camera():
         self.camera = cv2.VideoCapture(0)
         self.platform_coords = None
         self.image_ball_debug = None
+        self.ball_in_area = False
 
        
     def set_track_ranges(self,TRACK_RANGES_FILE_PATH) -> None:
@@ -20,11 +21,20 @@ class Camera():
         self.track_ranges_min = (ball_ranges["H_min"],ball_ranges["S_min"],ball_ranges["V_min"])
         self.track_ranges_max = (ball_ranges["H_max"],ball_ranges["S_max"],ball_ranges["V_max"])
 
-        self.blur =   track_ranges['platform']['blur']
-        self.area_min =   track_ranges['platform']['area_min']
-        self.threshold1 =   track_ranges['platform']['threshold1']
-        self.threshold2 =   track_ranges['platform']['threshold2']
-    
+        if "rectangle_coords" in track_ranges.keys():
+            self.platform_coords =  (
+                track_ranges['rectangle_coords']["x"],
+                track_ranges['rectangle_coords']["y"],
+                track_ranges['rectangle_coords']["w"],
+                track_ranges['rectangle_coords']["h"]
+            )
+        else:
+            self.platform_coords = None
+            self.blur =   track_ranges['platform']['blur']
+            self.area_min =   track_ranges['platform']['area_min']
+            self.threshold1 =   track_ranges['platform']['threshold1']
+            self.threshold2 =   track_ranges['platform']['threshold2']
+        
     
     def read_image(self)->None:
         ret, self.image = self.camera.read()
@@ -65,7 +75,8 @@ class Camera():
         # centroid
         c = max(cnts, key=cv2.contourArea)
         ((x, y), radius) = cv2.minEnclosingCircle(c)
-        if radius> 5:
+        if radius> 20:
+            self.ball_in_area = True
             M = cv2.moments(c)
             self.ball_position = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
             
@@ -92,27 +103,31 @@ class Camera():
         
             cv2.putText(self.image_ball_debug,"error: ", (self.setpoint [0]+10,self.setpoint [1]), cv2.FONT_HERSHEY_SIMPLEX, 0.7,(255, 0, 255),1)
             cv2.putText(self.image_ball_debug,str(int(absolute_error)), (self.setpoint [0]+10,self.setpoint [1]+15), cv2.FONT_HERSHEY_SIMPLEX, 0.7,(255, 0, 255),1)
+        else:
+            self.ball_in_area = False
         
 
     def find_platform(self)-> None:
-        self.read_image()
-        self.__preprocess_platform()
+        if self.platform_coords is None:
+            self.read_image()
+            self.__preprocess_platform()
 
-        contours,_ = cv2.findContours(self.image_processed, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-        areas = [cv2.contourArea(cnt) for cnt in contours]
 
-        index_maximum_area = np.argmax(areas)
+            contours,_ = cv2.findContours(self.image_processed, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+            areas = [cv2.contourArea(cnt) for cnt in contours]
 
-        larger_contour = contours[index_maximum_area]
+            index_maximum_area = np.argmax(areas)
 
-        area = cv2.contourArea(larger_contour) 
-        if area > self.area_min:
-            perimeter = cv2.arcLength(larger_contour,True)
-            approx_geometry = cv2.approxPolyDP(larger_contour,0.02* perimeter,True)
-            x_,y_,w,h = cv2.boundingRect(approx_geometry)
-            self.platform_coords =  (x_,y_,w,h)
-        else:
-            self.platform_coords =  None
+            larger_contour = contours[index_maximum_area]
+
+            area = cv2.contourArea(larger_contour) 
+            if area > self.area_min:
+                perimeter = cv2.arcLength(larger_contour,True)
+                approx_geometry = cv2.approxPolyDP(larger_contour,0.02* perimeter,True)
+                x_,y_,w,h = cv2.boundingRect(approx_geometry)
+                self.platform_coords =  (x_,y_,w,h)
+            else:
+                self.platform_coords =  None
 
     
     def __preprocess_platform(self):
@@ -130,9 +145,11 @@ class Camera():
             return None
     
     def show_camera_output(self):
-        if self.image_ball_debug is not None:
+        if self.ball_in_area:
+            #cv2.imshow("result",cv2.rotate(self.image_ball_debug,cv2.ROTATE_90_CLOCKWISE))
             cv2.imshow("result",self.image_ball_debug)
         else:
+            #cv2.imshow("result",cv2.rotate(self.image,cv2.ROTATE_90_CLOCKWISE))
             cv2.imshow("result",self.image)
         
         

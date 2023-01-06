@@ -1,9 +1,9 @@
 {
     "ball": {
-        "H_min": 58,
+        "H_min": 60,
         "S_min": 0,
-        "V_min": 105,
-        "H_max": 97,
+        "V_min": 100,
+        "H_max": 108,
         "S_max": 142,
         "V_max": 255
     },
@@ -12,5 +12,11 @@
         "area_min": 3500,
         "threshold1": 80,
         "threshold2": 88
+    },
+    "rectangle_coords": {
+        "x":130,
+        "y":15,
+        "w":420,
+        "h":410
     }
 }
