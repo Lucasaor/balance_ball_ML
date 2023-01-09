@@ -33,6 +33,9 @@ def main():
         servo_0.attach_pin(GPIO_SERVO_0_PIN)
         servo_1.attach_pin(GPIO_SERVO_1_PIN)
 
+        servo_0.set_offset(0)
+        servo_1.set_offset(0)
+
         #initialize K values:
         with open(PID_PARAMETERS_FILE_PATH,'rb') as fp:
             k_values = json.load(fp)
@@ -86,11 +89,15 @@ def main():
         balance_ready = True
         trial_number = 0
         result_array = []
+        ball_failed = False
         # running the process
         while True:
+            print(f"ball_in_area:{cam.ball_in_area}")
             cam.get_ball_position()
             cam.show_camera_output()
             start_balance = hasattr(cam, 'error_x') and hasattr(cam, 'error_y') and cam.ball_in_area and balance_ready
+            #print(f"balance_ready={balance_ready},start_balance={start_balance}")
+
             if start_balance:
                 trial_number += 1
                 print(f"starting balance. Trial #{trial_number}")
@@ -100,9 +107,13 @@ def main():
 
                 if not cam.ball_in_area:
                     balance_ready = start_balance = False
+                    ball_failed = True
                     result = max_settling_time_seconds*10
                     print(f"Trial #{trial_number} failed. Settling time: {result}")
-                    result_array.append(result)
+                    check_save = input("save result to cloud (y/n)? ")
+                    if check_save.lower()=='y':
+                        result_array.append(result)
+                        print("data saved in result array...")
 
                     
                 t = time.perf_counter_ns()/1e9 - start_time
@@ -111,21 +122,22 @@ def main():
                 
                 MV_y = PID_dict['Y'].send([t,cam.error_y,SP[1]]) 
                 servo_1.set_angle(MV_y)
-                if t > max_settling_time_seconds:
+                if t > max_settling_time_seconds and not ball_failed:
                     balance_ready = start_balance = False
                     result = max_settling_time_seconds
                     print(f"Trial #{trial_number} finished. Settling time: {result}")
-                    result_array.append(result)            
+                    result_array.append(result)
+                    print("data saved in result array...")            
                     
 
                 absolute_error = np.sqrt((cam.error_x-prev_error_x)**2 + (cam.error_y-prev_error_y)**2)
                 if absolute_error < error_thresh:
-                    if (t -error_thresh_timer) > min_stop_time_seconds:
+                    if (t -error_thresh_timer) > min_stop_time_seconds and not ball_failed:
                         balance_ready = start_balance = False
                         result = t
                         print(f"Trial #{trial_number} finished. Settling time: {result}")
                         result_array.append(result) 
-                        print("data successfully saved to dataframe.")
+                        print("data saved in result array...")
                    
                         
                 else:
@@ -133,16 +145,20 @@ def main():
                     prev_error_x = cam.error_x
                     prev_error_y = cam.error_y
                 
-                if cv2.waitKey(1) & 0xFF is ord('q'):
+                if cv2.waitKey(1) & 0xFF is ord('e'):
                     balance_ready = start_balance = False
             
             if not cam.ball_in_area:
                 start_time = time.perf_counter_ns()/1e9
                 error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
                 if not balance_ready:
-                    servo_0.set_angle(0,timeout_seconds=0.25)
-                    servo_1.set_angle(0,timeout_seconds=0.25)
+                    balance_ready = True
+                    ball_failed = False
+                    print("reseting table...")
+                    servo_0.set_angle(0)
+                    servo_1.set_angle(0)
                     print("table ready.")
+                    
                     if len(result_array) >= SAMPLES_PER_PID:
                         if sum(result_array) >= max_settling_time_seconds*10*len(result_array):
                             history_df = append_historical_data(history_df,NAME,False,k_values,np.mean(result_array)) 
@@ -162,12 +178,16 @@ def main():
                         update_PID(PID_dict,'X')
                         update_PID(PID_dict,'Y')
                         print(f"Next PID values are: [{[k_values['X']['Kp'],k_values['X']['Ki'],k_values['X']['Kd'],k_values['Y']['Kp'],k_values['Y']['Ki'],k_values['Y']['Kd']]}] ")
-                balance_ready = True
+                
 
             cam.show_camera_output()
             if cv2.waitKey(1) & 0xFF is ord('q'):
                 break
-                
+            
+            if cv2.waitKey(1) & 0xFF is ord('d'):
+                removed = result_array.pop()
+                print(f"previous value deleted! value: {removed}")
+                break
     finally:
         #disconnect the motors
         cv2.destroyAllWindows()

@@ -33,6 +33,10 @@ async def main():
         servo_0.attach_pin(GPIO_SERVO_0_PIN)
         servo_1.attach_pin(GPIO_SERVO_1_PIN)
 
+        servo_0.set_offset(-2)
+        servo_1.set_offset(5)
+
+
         #initialize K values:
         with open(PID_PARAMETERS_FILE_PATH,'rb') as fp:
             k_values = json.load(fp)
@@ -107,6 +111,7 @@ async def main():
         trial_number = 0
         # running the process
         while True:
+            print(f"ball_in_area:{cam.ball_in_area}")
             cam.get_ball_position()
             cam.show_camera_output()
             start_balance = hasattr(cam, 'error_x') and hasattr(cam, 'error_y') and cam.ball_in_area and balance_ready

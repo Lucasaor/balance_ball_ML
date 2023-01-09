@@ -75,7 +75,8 @@ class Camera():
         # centroid
         c = max(cnts, key=cv2.contourArea)
         ((x, y), radius) = cv2.minEnclosingCircle(c)
-        if radius> 20 and radius< 150:
+        if radius> 20 and radius < 150:
+            self.missing_ball_tresh = 0
             self.ball_in_area = True
             M = cv2.moments(c)
             self.ball_position = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))

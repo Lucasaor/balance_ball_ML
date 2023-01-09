@@ -5,8 +5,8 @@ import cv2
 
 def main():
     #define output pins
-    GPIO_SERVO_0_PIN = 11 #  bottom motor, green jumper
-    GPIO_SERVO_1_PIN = 12 #  right motor, red jumper
+    GPIO_SERVO_0_PIN = 32 #  bottom motor, green jumper
+    GPIO_SERVO_1_PIN = 33 #  right motor, red jumper
 
     #define track range file path:
     TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
@@ -20,6 +20,9 @@ def main():
         #attach servos to selected pins
         servo_0.attach_pin(GPIO_SERVO_0_PIN)
         servo_1.attach_pin(GPIO_SERVO_1_PIN)
+
+        servo_0.set_offset(0)
+        servo_1.set_offset(0)
 
         #starting camera
         cam = Camera()
@@ -35,8 +38,8 @@ def main():
         def set_servo_1(val):
             servo_1.set_angle(2*val-100)
         
-        cv2.createTrackbar("X","orientation",54,100,set_servo_0)
-        cv2.createTrackbar("Y","orientation",30,100,set_servo_1)
+        cv2.createTrackbar("X","orientation",50,100,set_servo_0)
+        cv2.createTrackbar("Y","orientation",50,100,set_servo_1)
 
         #cropping the work area
         cam.find_platform()
