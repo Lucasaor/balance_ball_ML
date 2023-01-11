@@ -1,10 +1,12 @@
 def PID(Kp, Ki, Kd, MV_bar=0):
     # initialize stored data
-    Kp /= 10
-    Ki /= 1e3
+    Kp 
+    Ki
     e_prev = 0
     t_prev = 0
     I = 0
+    I_limit = 100
+    D_limit = 100
     
     # initial control
     MV = MV_bar
@@ -19,6 +21,17 @@ def PID(Kp, Ki, Kd, MV_bar=0):
         P = Kp*e
         I += Ki*e*(t - t_prev)
         D = Kd*(e - e_prev)/(t - t_prev)
+
+        #saturating I and D
+        if I > I_limit:
+            I = I_limit
+        elif I < -I_limit:
+            I = -I_limit
+
+        if D > D_limit:
+            D = D_limit
+        elif D < -D_limit:
+            D = -D_limit
         
         MV = MV_bar + P + I + D
         

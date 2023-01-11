@@ -48,6 +48,10 @@ def main():
         while True:
             cam.get_ball_position()
             cam.show_camera_output()
+            if hasattr(cam,"ball_position"):
+                print(f"current ball status:{cam.ball_in_area}. ball position:{cam.ball_position}", end='\r')
+            else:
+                print(f"current ball status:{cam.ball_in_area}. ball position: None", end='\r')
             if cv2.waitKey(1) & 0xFF is ord('q'):
                 break
 

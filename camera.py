@@ -68,6 +68,7 @@ class Camera():
  
         # only proceed if at least one contour was found
         if len(cnts) < 1:
+            self.ball_in_area = False
             return None
         
         # find the largest contour in the mask, then use

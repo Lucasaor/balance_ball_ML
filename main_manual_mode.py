@@ -33,8 +33,8 @@ async def main():
         servo_0.attach_pin(GPIO_SERVO_0_PIN)
         servo_1.attach_pin(GPIO_SERVO_1_PIN)
 
-        servo_0.set_offset(-2)
-        servo_1.set_offset(5)
+        servo_0.set_offset(0)
+        servo_1.set_offset(0)
 
 
         #initialize K values:
@@ -95,9 +95,10 @@ async def main():
 
         #cropping the work area
         cam.find_platform()
+        print(f"platform_coords:{cam.platform_coords}")
 
         #setpoint for ball position (X,Y):
-        SP = (0,0)
+        SP = (200,200)
         # set initial and stop parameters:
         start_time = error_thresh_timer = time.perf_counter_ns()/1e9
         prev_error_x = 0
@@ -111,7 +112,12 @@ async def main():
         trial_number = 0
         # running the process
         while True:
-            print(f"ball_in_area:{cam.ball_in_area}")
+            if hasattr(cam,"ball_position"):
+                print(f"current ball status:{cam.ball_in_area}. ball position:{cam.ball_position}", end='\r')
+            else:
+                print(f"current ball status:{cam.ball_in_area}. ball position: None", end='\r')
+            if cv2.waitKey(1) & 0xFF is ord('q'):
+                break
             cam.get_ball_position()
             cam.show_camera_output()
             start_balance = hasattr(cam, 'error_x') and hasattr(cam, 'error_y') and cam.ball_in_area and balance_ready
@@ -125,40 +131,44 @@ async def main():
                 if not cam.ball_in_area:
                     balance_ready = start_balance = False
                     print(f"Trial #{trial_number} failed. Settling time: {max_settling_time_seconds*10}")
-                    check_save = input("save result to cloud (y/n)? ")
-                    if check_save.lower()=='y':
-                        event_hub_status = await push_data_to_event_hub(NAME,False,k_values,max_settling_time_seconds*10) 
-                        if event_hub_status:
-                            print("data sucessfully published to the cloud.")
-                        else:
-                            print('error writing data to the cloud.')
-                            print(event_hub_status)
-                        check_save ='n'
-                    else:
-                        print('event ignored.')
+                    update_PID(PID_dict,'X') 
+                    update_PID(PID_dict,'Y') 
+                    # check_save = input("save result to cloud (y/n)? ")
+                    # if check_save.lower()=='y':
+                    #     event_hub_status = await push_data_to_event_hub(NAME,False,k_values,max_settling_time_seconds*10) 
+                    #     if event_hub_status:
+                    #         print("data sucessfully published to the cloud.")
+                    #     else:
+                    #         print('error writing data to the cloud.')
+                    #         print(event_hub_status)
+                    #     check_save ='n'
+                    # else:
+                    #     print('event ignored.')
                         
                     
 
                 t = time.perf_counter_ns()/1e9 - start_time
-                MV_x = -PID_dict['X'].send([t,cam.error_x,SP[0]]) # X orientation is inverted
+                MV_x = -PID_dict['X'].send([t,cam.ball_position[0],SP[0]]) # X orientation is inverted
                 servo_0.set_angle(MV_x)
                 
-                MV_y = PID_dict['Y'].send([t,cam.error_y,SP[1]]) 
+                MV_y = PID_dict['Y'].send([t,cam.ball_position[1],SP[1]]) 
                 servo_1.set_angle(MV_y)
                 if t > max_settling_time_seconds:
                     balance_ready = start_balance = False
                     print(f"Trial #{trial_number} finished. Settling time: {max_settling_time_seconds}")
-                    check_save = input("save result to cloud (y/n)? ")
-                    if check_save.lower()=='y':
-                        event_hub_status = await push_data_to_event_hub(NAME,False,k_values,max_settling_time_seconds) 
-                        if event_hub_status:
-                            print("data sucessfully published to the cloud.")
-                        else:
-                            print('error writing data to the cloud.')
-                            print(event_hub_status)
-                        check_save ='n'
-                    else:
-                        print('event ignored.')
+                    update_PID(PID_dict,'X') 
+                    update_PID(PID_dict,'Y') 
+                    # check_save = input("save result to cloud (y/n)? ")
+                    # if check_save.lower()=='y':
+                    #     event_hub_status = await push_data_to_event_hub(NAME,False,k_values,max_settling_time_seconds) 
+                    #     if event_hub_status:
+                    #         print("data sucessfully published to the cloud.")
+                    #     else:
+                    #         print('error writing data to the cloud.')
+                    #         print(event_hub_status)
+                    #     check_save ='n'
+                    # else:
+                    #     print('event ignored.')
                     
 
                 absolute_error = np.sqrt((cam.error_x-prev_error_x)**2 + (cam.error_y-prev_error_y)**2)
@@ -166,17 +176,19 @@ async def main():
                     if (t -error_thresh_timer) > min_stop_time_seconds:
                         balance_ready = start_balance = False
                         print(f"Trial #{trial_number} finished. Settling time: {t}")
-                        check_save = input("save result to cloud (y/n)? ")
-                        if check_save.lower()=='y':
-                            event_hub_status = await push_data_to_event_hub(NAME,False,k_values,t) 
-                            if event_hub_status:
-                                print("data sucessfully published to the cloud.")
-                            else:
-                                print('error writing data to the cloud.')
-                                print(event_hub_status)
-                            check_save ='n'
-                        else:
-                            print('event ignored.')
+                        update_PID(PID_dict,'X') 
+                        update_PID(PID_dict,'Y') 
+                        # check_save = input("save result to cloud (y/n)? ")
+                        # if check_save.lower()=='y':
+                        #     event_hub_status = await push_data_to_event_hub(NAME,False,k_values,t) 
+                        #     if event_hub_status:
+                        #         print("data sucessfully published to the cloud.")
+                        #     else:
+                        #         print('error writing data to the cloud.')
+                        #         print(event_hub_status)
+                        #     check_save ='n'
+                        # else:
+                        #     print('event ignored.')
                     
                         
                 else:
@@ -191,8 +203,8 @@ async def main():
                 start_time = time.perf_counter_ns()/1e9
                 error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
                 if not balance_ready:
-                    servo_0.set_angle(0,timeout_seconds=0.25)
-                    servo_1.set_angle(0,timeout_seconds=0.25)
+                    servo_0.set_angle(0,timeout_seconds=1)
+                    servo_1.set_angle(0,timeout_seconds=1)
                     print("table ready.")
                 balance_ready = True
 
