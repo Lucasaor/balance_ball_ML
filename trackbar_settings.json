@@ -1,10 +1,10 @@
 {
     "ball": {
-        "H_min": 60,
+        "H_min": 50,
         "S_min": 0,
-        "V_min": 120,
-        "H_max": 108,
-        "S_max": 142,
+        "V_min": 177,
+        "H_max": 85,
+        "S_max": 120,
         "V_max": 255
     },
     "platform":{

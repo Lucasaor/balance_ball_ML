@@ -24,6 +24,9 @@ class Servo():
                 self.servo.ChangeDutyCycle(2+(angle/18))
             self.servo.ChangeDutyCycle(0)
     
+    def set_offset(self,offset=-5) -> None:
+        self.offset = offset
+
     def disconnect(self) -> None:
         self.servo.stop()
         GPIO.cleanup()
@@ -35,7 +38,7 @@ class Servo():
             input = -100
         elif input > 100:
             input >100
-        angle = 0.45*(input+100) # expression to linear map the range
+        angle = 0.45*(input+100+self.offset) # expression to linear map the range
         
         return angle
         

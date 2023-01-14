@@ -1,9 +1,7 @@
 
-import asyncio
 from servo import Servo
 from camera import Camera
 from pid import PID
-from event_hub import publish_event
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -12,7 +10,7 @@ import json
 import cv2
 
 
-async def main():
+def main():
     #define output pins
     GPIO_SERVO_0_PIN = 32 #  bottom motor, green jumper
     GPIO_SERVO_1_PIN = 33 #  right motor, red jumper
@@ -20,9 +18,10 @@ async def main():
     #define file paths:
     TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
     PID_PARAMETERS_FILE_PATH  = "PID_parameters.json"
-    #HISTORICAL_DATA_FILE_PATH = "historical_data.csv"
+    TRAJECTORY_DATA_FILE_PATH = "trajectory_data.json"
 
-    NAME = "Lucas A. Rodrigues"
+    NAME = "ML Training"
+
 
     try:
         #initialize servos
@@ -33,17 +32,14 @@ async def main():
         servo_0.attach_pin(GPIO_SERVO_0_PIN)
         servo_1.attach_pin(GPIO_SERVO_1_PIN)
 
-        servo_0.set_offset(0)
-        servo_1.set_offset(0)
-
+        servo_0.set_offset(-8)
+        servo_1.set_offset(10)
 
         #initialize K values:
         with open(PID_PARAMETERS_FILE_PATH,'rb') as fp:
             k_values = json.load(fp)
         #Creating the PID controllers (dynamically):
 
-        #open local historical database:
-        #history_df = pd.read_csv(HISTORICAL_DATA_FILE_PATH)
         
         PID_dict = {}
 
@@ -81,12 +77,16 @@ async def main():
         cv2.namedWindow("Platform parameters control")
         cv2.resizeWindow("Platform parameters control",640,480)
 
-        cv2.createTrackbar("Gain - X direction","Platform parameters control",100,500,set_Kp_X)
+        cv2.createTrackbar("Gain - X direction","Platform parameters control",40,500,set_Kp_X)
         cv2.createTrackbar("Integrator - X direction","Platform parameters control",0,100,set_Ki_X)
-        cv2.createTrackbar("Speed compensation - X direction","Platform parameters control",0,100,set_Kd_X)
-        cv2.createTrackbar("Gain - Y direction","Platform parameters control",100,500,set_Kp_Y)
+        cv2.createTrackbar("Speed compensation - X direction","Platform parameters control",15,100,set_Kd_X)
+        cv2.createTrackbar("Gain - Y direction","Platform parameters control",40,500,set_Kp_Y)
         cv2.createTrackbar("Integrator - Y direction","Platform parameters control",0,100,set_Ki_Y)
-        cv2.createTrackbar("Speed compensation - Y direction","Platform parameters control",0,100,set_Kd_Y)
+        cv2.createTrackbar("Speed compensation - Y direction","Platform parameters control",15,100,set_Kd_Y)
+
+        update_PID(PID_dict,'X')
+        update_PID(PID_dict,'Y')
+
 
         #starting camera
         cam = Camera()
@@ -95,10 +95,14 @@ async def main():
 
         #cropping the work area
         cam.find_platform()
-        print(f"platform_coords:{cam.platform_coords}")
 
         #setpoint for ball position (X,Y):
         SP = (200,200)
+        
+        #trajectory data
+        with open(TRAJECTORY_DATA_FILE_PATH,'rb') as fp:
+            trajectory_data = json.load(fp)
+        
         # set initial and stop parameters:
         start_time = error_thresh_timer = time.perf_counter_ns()/1e9
         prev_error_x = 0
@@ -106,127 +110,120 @@ async def main():
         error_thresh = 5
         
         max_settling_time_seconds = 20
-        min_stop_time_seconds = 1
+        min_stop_time_seconds = 10
 
         balance_ready = True
+        start_key_status = False
         trial_number = 0
+        ball_failed = False
         # running the process
         while True:
-            if hasattr(cam,"ball_position"):
-                print(f"current ball status:{cam.ball_in_area}. ball position:{cam.ball_position}", end='\r')
-            else:
-                print(f"current ball status:{cam.ball_in_area}. ball position: None", end='\r')
-            if cv2.waitKey(1) & 0xFF is ord('q'):
-                break
             cam.get_ball_position()
             cam.show_camera_output()
-            start_balance = hasattr(cam, 'error_x') and hasattr(cam, 'error_y') and cam.ball_in_area and balance_ready
+            start_balance = cam.ball_in_area and balance_ready and start_key_status
+            #print(f"balance_ready={balance_ready},start_balance={start_balance}")
+
             if start_balance:
                 trial_number += 1
+                trial_dt = str(datetime.utcnow())
                 print(f"starting balance. Trial #{trial_number}")
+                trajectory_data.update({trial_dt:{
+                    "X":[],
+                    "Y":[],
+                    "time":[],
+                    "MV_X":[],
+                    "MV_Y":[],
+                    "SP":[SP[0],SP[1]]
+                }})
             while start_balance:
                 cam.get_ball_position()
                 cam.show_camera_output()
 
-                if not cam.ball_in_area:
-                    balance_ready = start_balance = False
-                    result = max_settling_time_seconds/t *5000
-                    print(f"Trial #{trial_number} failed. Settling time: {result}")
-                    update_PID(PID_dict,'X') 
-                    update_PID(PID_dict,'Y') 
-                    check_save = input("save result to cloud (y/n)? ")
-                    if check_save.lower()=='y':
-                        event_hub_status = await push_data_to_event_hub(NAME,False,k_values,result) 
-                        if event_hub_status:
-                            print("data sucessfully published to the cloud.")
-                        else:
-                            print('error writing data to the cloud.')
-                            print(event_hub_status)
-                        check_save ='n'
-                    else:
-                        print('event ignored.')
-                        
-                    
 
                 t = time.perf_counter_ns()/1e9 - start_time
+                if not cam.ball_in_area:
+                    balance_ready = start_balance = False
+                    ball_failed = True
+
+                    
                 MV_x = -PID_dict['X'].send([t,cam.ball_position[0],SP[0]]) # X orientation is inverted
                 servo_0.set_angle(MV_x)
                 
                 MV_y = PID_dict['Y'].send([t,cam.ball_position[1],SP[1]]) 
                 servo_1.set_angle(MV_y)
-                if t > max_settling_time_seconds:
+
+                trajectory_data[trial_dt]['X'].append(cam.ball_position[0])
+                trajectory_data[trial_dt]['Y'].append(cam.ball_position[1])
+                trajectory_data[trial_dt]['time'].append(t)
+                trajectory_data[trial_dt]['MV_X'].append(MV_x)
+                trajectory_data[trial_dt]['MV_Y'].append(MV_y)
+
+                if t > max_settling_time_seconds and not ball_failed:
                     balance_ready = start_balance = False
                     position_error = np.sqrt((cam.ball_position[0]-SP[0])**2+(cam.ball_position[1]-SP[1])**2)
                     result = max_settling_time_seconds + position_error**2
                     print(f"Trial #{trial_number} finished. Settling time: {result}")
-                    update_PID(PID_dict,'X') 
-                    update_PID(PID_dict,'Y') 
-                    check_save = input("save result to cloud (y/n)? ")
-                    if check_save.lower()=='y':
-                        event_hub_status = await push_data_to_event_hub(NAME,True,k_values,result) 
-                        if event_hub_status:
-                            print("data sucessfully published to the cloud.")
-                        else:
-                            print('error writing data to the cloud.')
-                            print(event_hub_status)
-                        check_save ='n'
-                    else:
-                        print('event ignored.')
+
+                    time.sleep(0.2)             
                     
 
                 absolute_error = np.sqrt((cam.error_x-prev_error_x)**2 + (cam.error_y-prev_error_y)**2)
                 if absolute_error < error_thresh:
-                    if (t -error_thresh_timer) > min_stop_time_seconds:
+                    if (t -error_thresh_timer) > min_stop_time_seconds and not ball_failed:
                         balance_ready = start_balance = False
                         position_error = np.sqrt((cam.ball_position[0]-SP[0])**2+(cam.ball_position[1]-SP[1])**2)
                         result = t + position_error
                         print(f"Trial #{trial_number} finished. Settling time: {result}")
-                        update_PID(PID_dict,'X') 
-                        update_PID(PID_dict,'Y') 
-                        check_save = input("save result to cloud (y/n)? ")
-                        if check_save.lower()=='y':
-                            event_hub_status = await push_data_to_event_hub(NAME,True,k_values,result) 
-                            if event_hub_status:
-                                print("data sucessfully published to the cloud.")
-                            else:
-                                print('error writing data to the cloud.')
-                                print(event_hub_status)
-                            check_save ='n'
-                        else:
-                            print('event ignored.')
-                    
+    
+
+                        time.sleep(0.2)     
+                   
                         
                 else:
                     error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
                     prev_error_x = cam.error_x
                     prev_error_y = cam.error_y
                 
-                if cv2.waitKey(1) & 0xFF is ord('q'):
-                    balance_ready = start_balance = False
+
             
             if not cam.ball_in_area:
                 start_time = time.perf_counter_ns()/1e9
                 error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
                 if not balance_ready:
+                    start_key_status = False
+                    balance_ready = True
+                    ball_failed = False
+                    print("reseting table...")
                     servo_0.set_angle(0,timeout_seconds=1)
                     servo_1.set_angle(0,timeout_seconds=1)
-                    print("table ready.")
-                balance_ready = True
+                    time.sleep(0.5)
+                    print("table ready.")                  
+
+                    update_PID(PID_dict,'X')
+                    update_PID(PID_dict,'Y')
+                
 
             cam.show_camera_output()
-            if cv2.waitKey(1) & 0xFF is ord('q'):
+            key = cv2.waitKey(33)
+            if key==27:    # Esc key to stop
                 break
-                
+            elif key==32:
+                start_key_status = True # else print its value
+                print("balance authorized.")
+            
+
     finally:
+        #save trjectory data:
+        with open(TRAJECTORY_DATA_FILE_PATH,'w') as fp:
+            json.dump(trajectory_data,fp)
+        
         #disconnect the motors
         cv2.destroyAllWindows()
         servo_0.disconnect()
         servo_1.disconnect()
 
-        #save historical_data:
-        #history_df.to_csv(HISTORICAL_DATA_FILE_PATH,index=False)
 
-def append_historical_data(history_df,NAME,success,k_values,settling_time)->pd.DataFrame:
+def append_historical_data(history_df,NAME,success,k_values,score)->pd.DataFrame:
     result_json = {
                             "TS":[datetime.utcnow()],
                             "name":[NAME],
@@ -237,35 +234,15 @@ def append_historical_data(history_df,NAME,success,k_values,settling_time)->pd.D
                             "kp_y":[k_values['Y']['Kp']],
                             "ki_y":[k_values['Y']['Ki']],
                             "kd_y":[k_values['Y']['Kd']],
-                            "settling_time":[settling_time]
+                            "score":[score]
                         }
     return pd.concat([
 
                         history_df,
                         pd.DataFrame(result_json)
                     ], ignore_index=True)
-async def push_data_to_event_hub(NAME,success,k_values,settling_time)->bool:
-    try:
-        result_json = {
-                                "TS":str(datetime.utcnow()),
-                                "name":NAME,
-                                "sucess":success,
-                                "kp_x":k_values['X']['Kp'],
-                                "ki_x":k_values['X']['Ki'],
-                                "kd_x":k_values['X']['Kd'],
-                                "kp_y":k_values['Y']['Kp'],
-                                "ki_y":k_values['Y']['Ki'],
-                                "kd_y":k_values['Y']['Kd'],
-                                "settling_time":settling_time
-                            }
-        await publish_event(result_json)
-        return True
-    except Exception as e:
-        print(f"error found. Description: {str(e)}")
-        return False
-    
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())
 
-# if __name__ == '__main__':
-#     main()
+
+
+if __name__ == '__main__':
+     main()

@@ -12,17 +12,41 @@ import json
 import cv2
 
 
+def read_sharepoint_csv_file(SHAREPOINT_DATA_FILE_PATH:str,previous_TS)->pd.DataFrame:
+    sharepoint_df = pd.read_csv(SHAREPOINT_DATA_FILE_PATH)
+    sharepoint_df['TS'] = pd.to_datetime(sharepoint_df['TS'])
+
+    if len(sharepoint_df)>0:
+        current_df = sharepoint_df.query("TS > @previous_TS")
+    else:
+        current_df = pd.DataFrame(columns=["TS","User","GainX","GainY","IntegratorX","IntegratorY","Speed_compensationX","Speed_compensationY"])
+    
+
+    return current_df
+
+
 async def main():
     #define output pins
-    GPIO_SERVO_0_PIN = 32 #  bottom motor, green jumper
+    GPIO_SERVO_0_PIN = 32 #  bottom motor"," green jumper
     GPIO_SERVO_1_PIN = 33 #  right motor, red jumper
 
     #define file paths:
     TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
     PID_PARAMETERS_FILE_PATH  = "PID_parameters.json"
-    #HISTORICAL_DATA_FILE_PATH = "historical_data.csv"
+    SHAREPOINT_DATA_FILE_PATH = "sharepoint_connector/Output_test.csv"
+    previous_TS = datetime.utcnow()
+    print("""
+______ _       _ _        _   _____                  _     _            ___  ___ _      ______                     
+|  _  (_)     (_) |      | | /  __ \                | |   (_)           |  \/  || |     |  _  \                    
+| | | |_  __ _ _| |_ __ _| | | /  \/ ___  _ __ ___  | |    ___   _____  | .  . || |     | | | |___ _ __ ___   ___  
+| | | | |/ _` | | __/ _` | | | |    / _ \| '__/ _ \ | |   | \ \ / / _ \ | |\/| || |     | | | / _ \ '_ ` _ \ / _ \ 
+| |/ /| | (_| | | || (_| | | | \__/\ (_) | | |  __/ | |___| |\ V /  __/ | |  | || |____ | |/ /  __/ | | | | | (_) |
+|___/ |_|\__, |_|\__\__,_|_|  \____/\___/|_|  \___| \_____/_| \_/ \___| \_|  |_/\_____/ |___/ \___|_| |_| |_|\___/ 
+          __/ |                                                                                                    
+         |___/                                                                                                     
+""")
+    
 
-    NAME = "Lucas A. Rodrigues"
 
     try:
         #initialize servos
@@ -42,12 +66,15 @@ async def main():
             k_values = json.load(fp)
         #Creating the PID controllers (dynamically):
 
-        #open local historical database:
-        #history_df = pd.read_csv(HISTORICAL_DATA_FILE_PATH)
-        
+       
         PID_dict = {}
 
-               
+        #initialize PIDs
+        PID_dict['X'] = PID(1,0,0)
+        PID_dict['X'].send(None) 
+        PID_dict['Y'] = PID(1,0,0)
+        PID_dict['Y'].send(None) 
+        
         def update_PID(PID_dict,direction):
             PID_dict[direction] = PID(
             k_values[direction]['Kp'],
@@ -55,38 +82,19 @@ async def main():
             k_values[direction]['Kd'],
         )
             #initializing the controllers:
-            PID_dict[direction].send(None) 
+            PID_dict[direction].send(None)
 
-        # defining trackbar functions
-        def set_Kp_X(val):
-            k_values['X']['Kp'] = val/100
-            update_PID(PID_dict,'X')    
-        def set_Ki_X(val):
-            k_values['X']['Ki'] = val/100
-            update_PID(PID_dict,'X')    
-        def set_Kd_X(val):
-            k_values['X']['Kd'] = val/100
-            update_PID(PID_dict,'X')    
-        def set_Kp_Y(val):
-            k_values['Y']['Kp'] = val/100
-            update_PID(PID_dict,'Y')    
-        def set_Ki_Y(val):
-            k_values['Y']['Ki'] = val/100
-            update_PID(PID_dict,'Y')    
-        def set_Kd_Y(val):
-            k_values['Y']['Kd'] = val/100
-            update_PID(PID_dict,'Y')    
+        def update_K_values(current_df):
+            if len(current_df)>0:
+                k_values['X']['Kp'] = current_df['GainX'].iloc[0]/100
+                k_values['X']['Ki'] = current_df['IntegratorX'].iloc[0]/100
+                k_values['X']['Kd'] = current_df['Speed_compensationX'].iloc[0]/100
+                
+                k_values['Y']['Kp'] = current_df['GainY'].iloc[0]/100
+                k_values['Y']['Ki'] = current_df['IntegratorY'].iloc[0]/100
+                k_values['Y']['Kd'] = current_df['Speed_compensationY'].iloc[0]/100
 
-        #creating PID trackbar window
-        cv2.namedWindow("Platform parameters control")
-        cv2.resizeWindow("Platform parameters control",640,480)
-
-        cv2.createTrackbar("Gain - X direction","Platform parameters control",100,500,set_Kp_X)
-        cv2.createTrackbar("Integrator - X direction","Platform parameters control",0,100,set_Ki_X)
-        cv2.createTrackbar("Speed compensation - X direction","Platform parameters control",0,100,set_Kd_X)
-        cv2.createTrackbar("Gain - Y direction","Platform parameters control",100,500,set_Kp_Y)
-        cv2.createTrackbar("Integrator - Y direction","Platform parameters control",0,100,set_Ki_Y)
-        cv2.createTrackbar("Speed compensation - Y direction","Platform parameters control",0,100,set_Kd_Y)
+                return current_df.drop(current_df.index[0])
 
         #starting camera
         cam = Camera()
@@ -95,32 +103,49 @@ async def main():
 
         #cropping the work area
         cam.find_platform()
-        print(f"platform_coords:{cam.platform_coords}")
 
         #setpoint for ball position (X,Y):
         SP = (200,200)
         # set initial and stop parameters:
-        start_time = error_thresh_timer = time.perf_counter_ns()/1e9
+        start_time = error_thresh_timer = sharepoint_timer = time.perf_counter_ns()/1e9
         prev_error_x = 0
         prev_error_y = 0
         error_thresh = 5
         
         max_settling_time_seconds = 20
         min_stop_time_seconds = 1
+        start_key_status = False
+        ball_failed = False
 
+        sharepoint_file_update_interval_seconds = 1
         balance_ready = True
         trial_number = 0
+        parameters_df = pd.DataFrame()
         # running the process
         while True:
-            if hasattr(cam,"ball_position"):
-                print(f"current ball status:{cam.ball_in_area}. ball position:{cam.ball_position}", end='\r')
-            else:
-                print(f"current ball status:{cam.ball_in_area}. ball position: None", end='\r')
-            if cv2.waitKey(1) & 0xFF is ord('q'):
-                break
             cam.get_ball_position()
             cam.show_camera_output()
-            start_balance = hasattr(cam, 'error_x') and hasattr(cam, 'error_y') and cam.ball_in_area and balance_ready
+
+            if (time.perf_counter_ns()/1e9-sharepoint_timer) >sharepoint_file_update_interval_seconds:
+                parameters_df = read_sharepoint_csv_file(SHAREPOINT_DATA_FILE_PATH,previous_TS)
+                sharepoint_timer = time.perf_counter_ns()/1e9
+            
+            if len(parameters_df) > 0:
+                print("New table parameters received.")
+                current_user = parameters_df['User'].iloc[0]
+                previous_TS = parameters_df['TS'].iloc[0]
+                print(f"user: {current_user}")
+                print(f"Gain(X): {parameters_df['GainX'].iloc[0]},Error Compensation X: {parameters_df['IntegratorX'].iloc[0]},Speed compensation X: {parameters_df['Speed_compensationX'].iloc[0]}")
+                print(f"Gain(Y): {parameters_df['GainY'].iloc[0]},Error Compensation Y: {parameters_df['IntegratorY'].iloc[0]},Speed compensation Y: {parameters_df['Speed_compensationY'].iloc[0]}")
+
+                # Update parameters_Df and K_values for next PID config
+                parameters_df = update_K_values(parameters_df)
+                update_PID(PID_dict,'X') 
+                update_PID(PID_dict,'Y') 
+                start_key_status = True
+                print("\nwaiting for ball...")
+
+            start_balance = cam.ball_in_area and balance_ready and start_key_status
             if start_balance:
                 trial_number += 1
                 print(f"starting balance. Trial #{trial_number}")
@@ -129,6 +154,7 @@ async def main():
                 cam.show_camera_output()
 
                 if not cam.ball_in_area:
+                    ball_failed = True
                     balance_ready = start_balance = False
                     result = max_settling_time_seconds/t *5000
                     print(f"Trial #{trial_number} failed. Settling time: {result}")
@@ -136,7 +162,7 @@ async def main():
                     update_PID(PID_dict,'Y') 
                     check_save = input("save result to cloud (y/n)? ")
                     if check_save.lower()=='y':
-                        event_hub_status = await push_data_to_event_hub(NAME,False,k_values,result) 
+                        event_hub_status = await push_data_to_event_hub(current_user,False,k_values,result) 
                         if event_hub_status:
                             print("data sucessfully published to the cloud.")
                         else:
@@ -154,7 +180,7 @@ async def main():
                 
                 MV_y = PID_dict['Y'].send([t,cam.ball_position[1],SP[1]]) 
                 servo_1.set_angle(MV_y)
-                if t > max_settling_time_seconds:
+                if t > max_settling_time_seconds and not ball_failed:
                     balance_ready = start_balance = False
                     position_error = np.sqrt((cam.ball_position[0]-SP[0])**2+(cam.ball_position[1]-SP[1])**2)
                     result = max_settling_time_seconds + position_error**2
@@ -163,7 +189,7 @@ async def main():
                     update_PID(PID_dict,'Y') 
                     check_save = input("save result to cloud (y/n)? ")
                     if check_save.lower()=='y':
-                        event_hub_status = await push_data_to_event_hub(NAME,True,k_values,result) 
+                        event_hub_status = await push_data_to_event_hub(current_user,True,k_values,result) 
                         if event_hub_status:
                             print("data sucessfully published to the cloud.")
                         else:
@@ -176,7 +202,7 @@ async def main():
 
                 absolute_error = np.sqrt((cam.error_x-prev_error_x)**2 + (cam.error_y-prev_error_y)**2)
                 if absolute_error < error_thresh:
-                    if (t -error_thresh_timer) > min_stop_time_seconds:
+                    if (t -error_thresh_timer) > min_stop_time_seconds and not ball_failed:
                         balance_ready = start_balance = False
                         position_error = np.sqrt((cam.ball_position[0]-SP[0])**2+(cam.ball_position[1]-SP[1])**2)
                         result = t + position_error
@@ -185,7 +211,7 @@ async def main():
                         update_PID(PID_dict,'Y') 
                         check_save = input("save result to cloud (y/n)? ")
                         if check_save.lower()=='y':
-                            event_hub_status = await push_data_to_event_hub(NAME,True,k_values,result) 
+                            event_hub_status = await push_data_to_event_hub(current_user,True,k_values,result) 
                             if event_hub_status:
                                 print("data sucessfully published to the cloud.")
                             else:
@@ -214,8 +240,12 @@ async def main():
                 balance_ready = True
 
             cam.show_camera_output()
-            if cv2.waitKey(1) & 0xFF is ord('q'):
+            key = cv2.waitKey(33)
+            if key==27:    # Esc key to stop
                 break
+            # elif key==32:
+            #     start_key_status = True # else print its value
+            #     print("balance authorized.")
                 
     finally:
         #disconnect the motors
@@ -250,12 +280,12 @@ async def push_data_to_event_hub(NAME,success,k_values,settling_time)->bool:
                                 "TS":str(datetime.utcnow()),
                                 "name":NAME,
                                 "sucess":success,
-                                "kp_x":k_values['X']['Kp'],
-                                "ki_x":k_values['X']['Ki'],
-                                "kd_x":k_values['X']['Kd'],
-                                "kp_y":k_values['Y']['Kp'],
-                                "ki_y":k_values['Y']['Ki'],
-                                "kd_y":k_values['Y']['Kd'],
+                                "kp_x":k_values['X']['Kp']*100,
+                                "ki_x":k_values['X']['Ki']*100,
+                                "kd_x":k_values['X']['Kd']*100,
+                                "kp_y":k_values['Y']['Kp']*100,
+                                "ki_y":k_values['Y']['Ki']*100,
+                                "kd_y":k_values['Y']['Kd']*100,
                                 "settling_time":settling_time
                             }
         await publish_event(result_json)
