@@ -238,6 +238,7 @@ ______ _       _ _        _   _____                  _     _            ___  ___
                     servo_1.set_angle(0,timeout_seconds=1)
                     print("table ready.")
                 balance_ready = True
+                ball_failed = False
 
             cam.show_camera_output()
             key = cv2.waitKey(33)

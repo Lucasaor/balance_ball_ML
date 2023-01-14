@@ -37,6 +37,10 @@ async def main():
         servo_1.set_offset(0)
 
 
+        servo_0.set_offset(0)
+        servo_1.set_offset(0)
+
+
         #initialize K values:
         with open(PID_PARAMETERS_FILE_PATH,'rb') as fp:
             k_values = json.load(fp)
