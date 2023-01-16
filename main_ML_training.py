@@ -57,9 +57,9 @@ def main():
             PID_dict[direction].send(None) 
 
         #Initialize PID:
-        Kp_range = [0.1,0.7] 
-        Ki_range = [0.1,0.6]
-        Kd_range = [0.15,0.6]
+        Kp_range = [0.1,5] 
+        Ki_range = [0.1,2]
+        Kd_range = [0.15,2]
 
         k_values['X']['Kp'] = np.random.uniform(Kp_range[0],Kp_range[1])
         k_values['X']['Ki'] = np.random.uniform(Ki_range[0],Ki_range[1])

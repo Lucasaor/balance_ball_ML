@@ -4,7 +4,7 @@
         "S_min": 0,
         "V_min": 177,
         "H_max": 85,
-        "S_max": 120,
+        "S_max": 255,
         "V_max": 255
     },
     "platform":{
