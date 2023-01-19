@@ -160,7 +160,7 @@ def main():
     parameters_df = pd.concat([parameters_df,ML_df],ignore_index=True)
 
     columns = ["TS","User","GainX","GainY","IntegratorX","IntegratorY","Speed_compensationX","Speed_compensationY"]
-    parameters_df[columns].to_csv(SHAREPOINT_DATA_FILE_PATH)
+    parameters_df[columns].to_csv(SHAREPOINT_DATA_FILE_PATH,index=False)
     print("\n\nML datapoints sent.")
 
 if __name__ == '__main__':

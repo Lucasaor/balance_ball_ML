@@ -236,6 +236,8 @@ ______ _       _ _        _   _____                  _     _            ___  ___
                 if not balance_ready:
                     servo_0.set_angle(0,timeout_seconds=1)
                     servo_1.set_angle(0,timeout_seconds=1)
+                    update_PID(PID_dict,'X') 
+                    update_PID(PID_dict,'Y') 
                     print("table ready.")
                 balance_ready = True
                 ball_failed = False
