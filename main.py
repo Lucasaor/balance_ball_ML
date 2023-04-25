@@ -1,4 +1,4 @@
-
+#from asyncua import Client,ua
 import asyncio
 from servo import Servo
 from camera import Camera
@@ -23,7 +23,7 @@ def read_sharepoint_csv_file(SHAREPOINT_DATA_FILE_PATH:str,previous_TS)->pd.Data
     
 
     return current_df
-
+     
 
 async def main():
     #define output pins
@@ -31,7 +31,7 @@ async def main():
     GPIO_SERVO_1_PIN = 33 #  right motor, red jumper
 
     #define file paths:
-    TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
+    TRACK_RANGES_FILE_PATH = "trackbar_settings orange.json"
     PID_PARAMETERS_FILE_PATH  = "PID_parameters.json"
     SHAREPOINT_DATA_FILE_PATH = "sharepoint_connector/Output_test.csv"
     previous_TS = datetime.utcnow()
@@ -110,10 +110,10 @@ ______ _       _ _        _   _____                  _     _            ___  ___
         start_time = error_thresh_timer = sharepoint_timer = time.perf_counter_ns()/1e9
         prev_error_x = 0
         prev_error_y = 0
-        error_thresh = 5
+        error_thresh = 10
         
         max_settling_time_seconds = 20
-        min_stop_time_seconds = 1
+        min_stop_time_seconds = 2
         start_key_status = False
         ball_failed = False
 
@@ -177,9 +177,12 @@ ______ _       _ _        _   _____                  _     _            ___  ___
                 t = time.perf_counter_ns()/1e9 - start_time
                 MV_x = -PID_dict['X'].send([t,cam.ball_position[0],SP[0]]) # X orientation is inverted
                 servo_0.set_angle(MV_x)
+                #await send_position_to_twin(0,MV_x)
                 
                 MV_y = PID_dict['Y'].send([t,cam.ball_position[1],SP[1]]) 
                 servo_1.set_angle(MV_y)
+                #await send_position_to_twin(1,MV_y)
+                
                 if t > max_settling_time_seconds and not ball_failed:
                     balance_ready = start_balance = False
                     position_error = np.sqrt((cam.ball_position[0]-SP[0])**2+(cam.ball_position[1]-SP[1])**2)
@@ -207,6 +210,8 @@ ______ _       _ _        _   _____                  _     _            ___  ___
                         position_error = np.sqrt((cam.ball_position[0]-SP[0])**2+(cam.ball_position[1]-SP[1])**2)
                         result = t + position_error
                         print(f"Trial #{trial_number} finished. Settling time: {result}")
+                        #servo_0.set_angle(20,timeout_seconds=1)
+                        #servo_1.set_angle(-20,timeout_seconds=1)
                         update_PID(PID_dict,'X') 
                         update_PID(PID_dict,'Y') 
                         check_save = input("save result to cloud (y/n)? ")
@@ -234,8 +239,8 @@ ______ _       _ _        _   _____                  _     _            ___  ___
                 start_time = time.perf_counter_ns()/1e9
                 error_thresh_timer = time.perf_counter_ns()/1e9 - start_time
                 if not balance_ready:
-                    servo_0.set_angle(0,timeout_seconds=1)
-                    servo_1.set_angle(0,timeout_seconds=1)
+                    servo_0.set_angle(20,timeout_seconds=1)
+                    servo_1.set_angle(-20,timeout_seconds=1)
                     update_PID(PID_dict,'X') 
                     update_PID(PID_dict,'Y') 
                     print("table ready.")

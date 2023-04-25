@@ -1,0 +1,22 @@
+{
+    "ball": {
+        "H_min": 19,
+        "S_min": 0,
+        "V_min": 242,
+        "H_max": 28,
+        "S_max": 177,
+        "V_max": 255
+    },
+    "platform":{
+        "blur": 3,
+        "area_min": 3500,
+        "threshold1": 80,
+        "threshold2": 88
+    },
+    "rectangle_coords": {
+        "x":130,
+        "y":15,
+        "w":420,
+        "h":410
+    }
+}

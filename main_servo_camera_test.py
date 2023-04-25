@@ -9,7 +9,7 @@ def main():
     GPIO_SERVO_1_PIN = 33 #  right motor, red jumper
 
     #define track range file path:
-    TRACK_RANGES_FILE_PATH = "trackbar_settings.json"
+    TRACK_RANGES_FILE_PATH = "trackbar_settings orange.json"
 
 
     try:
